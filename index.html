@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Veck.io Clone</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #0b0d12; overflow: hidden;
+        font-family: system-ui, sans-serif; color: #e8ecf1; user-select: none; }
+      #game { width: 100vw; height: 100vh; }
+
+      #hud {
+        position: absolute; inset: 0; pointer-events: none;
+      }
+      #crosshair {
+        position: absolute; left: 50%; top: 50%; width: 18px; height: 18px;
+        transform: translate(-50%, -50%);
+      }
+      #crosshair::before, #crosshair::after {
+        content: ''; position: absolute; background: #e8ecf1; box-shadow: 0 0 2px #000;
+      }
+      #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+      #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+
+      #stats {
+        position: absolute; left: 16px; bottom: 14px;
+        background: rgba(0,0,0,0.45); padding: 10px 14px; border-radius: 8px;
+        font-size: 14px; line-height: 1.5; min-width: 160px;
+      }
+      #stats b { color: #7fd1ff; }
+      #ammo { color: #ffd470; }
+      #hp { color: #7fff9c; }
+
+      #score {
+        position: absolute; right: 16px; top: 14px;
+        background: rgba(0,0,0,0.45); padding: 10px 14px; border-radius: 8px;
+        font-size: 16px;
+      }
+
+      #overlay {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.55); cursor: pointer; text-align: center;
+      }
+      #overlay .panel {
+        background: #161a22; padding: 28px 36px; border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.6); max-width: 460px;
+      }
+      #overlay h1 { margin: 0 0 8px; color: #7fd1ff; }
+      #overlay p { margin: 6px 0; line-height: 1.5; }
+      #overlay .keys { color: #ffd470; }
+      #overlay.hidden { display: none; }
+
+      #hitmarker {
+        position: absolute; left: 50%; top: 50%; width: 24px; height: 24px;
+        transform: translate(-50%, -50%); opacity: 0;
+        transition: opacity 0.18s ease-out;
+      }
+      #hitmarker::before, #hitmarker::after {
+        content: ''; position: absolute; background: #ff5060; width: 12px; height: 2px; top: 11px;
+      }
+      #hitmarker::before { left: 0; transform: rotate(45deg); }
+      #hitmarker::after  { right: 0; transform: rotate(-45deg); }
+      #hitmarker.show { opacity: 1; transition: none; }
+
+      #damage {
+        position: absolute; inset: 0; pointer-events: none; opacity: 0;
+        background: radial-gradient(ellipse at center, transparent 50%, rgba(255,40,40,0.55) 100%);
+        transition: opacity 0.4s ease-out;
+      }
+      #damage.show { opacity: 1; transition: none; }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="hud">
+      <div id="crosshair"></div>
+      <div id="hitmarker"></div>
+      <div id="damage"></div>
+      <div id="killfeed"></div>
+      <div id="scoreboard"><table><thead><tr><th>Player</th><th>Score</th><th>HP</th></tr></thead><tbody id="sbBody"></tbody></table></div>
+      <div id="score">Score: <b id="scoreVal">0</b></div>
+      <div id="stats">
+        <div>HP: <span id="hp">100</span></div>
+        <div>Weapon: <span id="weapon" style="color:#ffd470;">SMG</span></div>
+        <div>Ammo: <span id="ammo">30 / 90</span></div>
+        <div>Streak: <span id="streak" style="color:#ff9c5b;">0</span></div>
+        <div>Enemies: <span id="enemies">0</span></div>
+      </div>
+      <div id="weaponBar" style="position:absolute; bottom:14px; left:50%; transform:translateX(-50%); display:flex; gap:6px; font-size:12px;">
+        <div class="wslot" data-w="pistol">1 Pistol</div>
+        <div class="wslot" data-w="smg">2 SMG</div>
+        <div class="wslot" data-w="shotgun">3 Shotgun</div>
+        <div class="wslot" data-w="sniper">4 Sniper</div>
+      </div>
+      <style>
+        .wslot { background:rgba(0,0,0,0.5); padding:6px 10px; border-radius:5px; border:1px solid transparent; color:#aab; }
+        .wslot.active { border-color:#7fd1ff; color:#fff; background:rgba(20,40,60,0.7); }
+      </style>
+    </div>
+    <div id="overlay">
+      <div class="panel">
+        <h1>Veck.io Clone</h1>
+        <p>Browser FPS prototype — Phaser shell + Three.js renderer.</p>
+        <p><span class="keys">WASD</span> move &nbsp; <span class="keys">Space</span> jump &nbsp; <span class="keys">Shift</span> sprint</p>
+        <p><span class="keys">Mouse</span> aim &nbsp; <span class="keys">Click</span> shoot &nbsp; <span class="keys">R</span> reload</p>
+        <div id="modeBtns" style="display:flex; gap:10px; justify-content:center; margin:14px 0 6px;">
+          <button id="playSP" class="primary-btn">Singleplayer</button>
+          <button id="playMP" class="primary-btn">Multiplayer</button>
+          <button id="openSettings" class="ghost-btn">Settings</button>
+        </div>
+        <div id="mpForm" style="display:none; margin-top:10px; text-align:left; font-size:13px;">
+          <div style="margin:6px 0;">
+            <label>Server URL<br><input id="mpUrl" value="ws://localhost:8080" style="width:100%;padding:6px;border-radius:5px;border:1px solid #38404f;background:#0e1219;color:#e8ecf1;font-family:inherit;"></label>
+          </div>
+          <div style="margin:6px 0;">
+            <label>Name<br><input id="mpName" value="" placeholder="Player" style="width:100%;padding:6px;border-radius:5px;border:1px solid #38404f;background:#0e1219;color:#e8ecf1;font-family:inherit;"></label>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="mpConnect" class="primary-btn" style="flex:1;">Connect</button>
+            <button id="mpCancel" class="ghost-btn">Cancel</button>
+          </div>
+          <div id="mpStatus" style="margin-top:8px; min-height:18px; color:#ffd470;"></div>
+        </div>
+        <p style="font-size:12px;opacity:0.7;margin-top:10px;">Esc opens menu &nbsp; Right-click to scope &nbsp; R to reload</p>
+      </div>
+    </div>
+    <style>
+      .primary-btn { background:#7fd1ff; color:#0b0d12; border:1px solid #7fd1ff; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:600; font-family:inherit; }
+      .primary-btn:hover { background:#a3deff; }
+      .ghost-btn { background:#252b38; color:#e8ecf1; border:1px solid #38404f; padding:8px 16px; border-radius:6px; cursor:pointer; font-family:inherit; }
+      .ghost-btn:hover { background:#2f3645; }
+      #killfeed { position:absolute; right:16px; top:60px; font-size:13px; max-width:340px; pointer-events:none; }
+      #killfeed div { background:rgba(0,0,0,0.5); padding:4px 8px; border-radius:4px; margin-bottom:4px; }
+      #scoreboard { position:absolute; left:50%; top:60px; transform:translateX(-50%); background:rgba(0,0,0,0.55); padding:10px 14px; border-radius:8px; font-size:13px; min-width:220px; display:none; }
+      #scoreboard table { width:100%; border-collapse:collapse; }
+      #scoreboard th, #scoreboard td { padding:3px 8px; text-align:left; }
+      #scoreboard th { color:#7fd1ff; border-bottom:1px solid #38404f; }
+    </style>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
