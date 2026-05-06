@@ -4,6 +4,17 @@ import { WeaponId } from '../game/Weapons';
 
 interface Tracer { line: THREE.Line; life: number; }
 interface MuzzleFlash { mesh: THREE.Mesh; life: number; }
+interface Bullet {
+  mesh: THREE.Mesh;
+  trail: THREE.Line;
+  trailGeo: THREE.BufferGeometry;
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  dir: THREE.Vector3;
+  totalDist: number;
+  travelled: number;
+  speed: number;
+}
 
 export class ThreeGameRenderer {
   readonly renderer: THREE.WebGLRenderer;
@@ -14,6 +25,8 @@ export class ThreeGameRenderer {
   private remoteMeshes = new Map<number, THREE.Group>();
   private tracers: Tracer[] = [];
   private flashes: MuzzleFlash[] = [];
+  private bullets: Bullet[] = [];
+  private gunMaterials: THREE.MeshStandardMaterial[] = [];
   private gunGroup: THREE.Group;
   private gunBaseY = -0.18;
   private bobTime = 0;
@@ -111,11 +124,12 @@ export class ThreeGameRenderer {
     const accentColor: Record<WeaponId, number> = {
       pistol: 0x7fd1ff, smg: 0xffd470, shotgun: 0xff8a5b, sniper: 0x9bff7f,
     };
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c1f26, metalness: 0.5, roughness: 0.4 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c1f26, metalness: 0.5, roughness: 0.4, transparent: true, opacity: 1 });
     const accentMat = new THREE.MeshStandardMaterial({
       color: accentColor[id], emissive: accentColor[id], emissiveIntensity: 0.15,
-      metalness: 0.6, roughness: 0.3
+      metalness: 0.6, roughness: 0.3, transparent: true, opacity: 1
     });
+    this.gunMaterials = [bodyMat, accentMat];
 
     // Different proportions per weapon.
     const profile: Record<WeaponId, { body: [number, number, number]; barrelLen: number; barrelRad: number; sightSize: number }> = {
@@ -242,10 +256,37 @@ export class ThreeGameRenderer {
 
   spawnTracer(from: THREE.Vector3, to: THREE.Vector3) {
     const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
-    const mat = new THREE.LineBasicMaterial({ color: 0xfff2a8, transparent: true, opacity: 0.9 });
+    const mat = new THREE.LineBasicMaterial({ color: 0xfff2a8, transparent: true, opacity: 0.5 });
     const line = new THREE.Line(geo, mat);
     this.scene.add(line);
-    this.tracers.push({ line, life: 0.06 });
+    this.tracers.push({ line, life: 0.05 });
+  }
+
+  /** Spawn a visible bullet that travels from `from` to `to` at `speed` m/s, leaving a streak. */
+  spawnBullet(from: THREE.Vector3, to: THREE.Vector3, color = 0xfff2a8, speed = 180) {
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const totalDist = dir.length();
+    if (totalDist < 0.001) return;
+    dir.normalize();
+
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 8, 6),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    mesh.position.copy(from);
+    this.scene.add(mesh);
+
+    const trailGeo = new THREE.BufferGeometry().setFromPoints([from.clone(), from.clone()]);
+    const trail = new THREE.Line(
+      trailGeo,
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85 })
+    );
+    this.scene.add(trail);
+
+    this.bullets.push({
+      mesh, trail, trailGeo, from: from.clone(), to: to.clone(),
+      dir, totalDist, travelled: 0, speed
+    });
   }
 
   spawnMuzzleFlash() {
@@ -301,6 +342,41 @@ export class ThreeGameRenderer {
       if (f.life <= 0) { this.camera.remove(f.mesh); return false; }
       return true;
     });
+
+    // Advance bullets.
+    for (const bu of this.bullets) {
+      bu.travelled += bu.speed * dt;
+      const t = Math.min(1, bu.travelled / bu.totalDist);
+      bu.mesh.position.copy(bu.from).addScaledVector(bu.dir, bu.travelled);
+      // Trail from a point behind to current position.
+      const trailLen = Math.min(2.5, bu.travelled);
+      const tailStart = bu.mesh.position.clone().addScaledVector(bu.dir, -trailLen);
+      const arr = bu.trailGeo.attributes.position.array as Float32Array;
+      arr[0] = tailStart.x; arr[1] = tailStart.y; arr[2] = tailStart.z;
+      arr[3] = bu.mesh.position.x; arr[4] = bu.mesh.position.y; arr[5] = bu.mesh.position.z;
+      bu.trailGeo.attributes.position.needsUpdate = true;
+      if (t >= 1) {
+        // Mark for removal.
+        (bu as any)._done = true;
+      }
+    }
+    this.bullets = this.bullets.filter(bu => {
+      if ((bu as any)._done) {
+        this.scene.remove(bu.mesh); this.scene.remove(bu.trail);
+        bu.mesh.geometry.dispose();
+        (bu.mesh.material as THREE.Material).dispose();
+        bu.trailGeo.dispose();
+        (bu.trail.material as THREE.Material).dispose();
+        return false;
+      }
+      return true;
+    });
+
+    // Viewmodel transparency when aiming (so the gun doesn't block the view).
+    const targetOpacity = this.aiming ? 0.35 : 1.0;
+    for (const m of this.gunMaterials) {
+      m.opacity += (targetOpacity - m.opacity) * Math.min(1, 14 * dt);
+    }
 
     // Viewmodel bob + recoil recovery + ADS lerp.
     if (moving) this.bobTime += dt * (this.aiming ? 5 : 9);

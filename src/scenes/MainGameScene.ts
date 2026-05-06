@@ -327,7 +327,11 @@ export class MainGameScene extends Phaser.Scene {
           break;
         case 'shoot':
           if (ev.by !== this.net.selfId) {
-            this.three.spawnTracer(new THREE.Vector3(...ev.from), new THREE.Vector3(...ev.to));
+            this.three.spawnBullet(
+              new THREE.Vector3(...ev.from),
+              new THREE.Vector3(...ev.to),
+              0xffb060, 180
+            );
           }
           break;
         case 'match_over': {
@@ -368,6 +372,12 @@ export class MainGameScene extends Phaser.Scene {
     this.three.setWeapon(this.board.player.current);
     if (this.input$.aiming) this.three.setFovTarget(WEAPONS[this.board.player.current].adsFov);
 
+    // Sniper scope overlay.
+    const scope = document.getElementById('scope');
+    if (scope) {
+      scope.style.display = (this.input$.aiming && this.board.player.current === 'sniper') ? 'block' : 'none';
+    }
+
     if (playing && this.input$.shoot && this.board.player.hp > 0) {
       const def = WEAPONS[this.board.player.current];
       // Auto vs semi: if not auto, only fire on first frame; consume immediately.
@@ -392,7 +402,12 @@ export class MainGameScene extends Phaser.Scene {
               }
             }
             const barrel = origin.clone().add(r.dir.clone().multiplyScalar(0.6));
-            this.three.spawnTracer(barrel, end);
+            const bulletColor = this.board.player.current === 'sniper' ? 0xaaffcc
+              : this.board.player.current === 'shotgun' ? 0xffc080
+              : this.board.player.current === 'pistol' ? 0xaaddff : 0xfff2a8;
+            const bulletSpeed = this.board.player.current === 'sniper' ? 260
+              : this.board.player.current === 'shotgun' ? 110 : 180;
+            this.three.spawnBullet(barrel, end, bulletColor, bulletSpeed);
             if (this.mode === 'mp' && this.net) {
               this.net.sendShoot([barrel.x, barrel.y, barrel.z], [end.x, end.y, end.z]);
               if (remoteHitId != null) {

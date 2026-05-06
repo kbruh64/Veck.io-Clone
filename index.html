@@ -77,6 +77,14 @@
       <div id="hitmarker"></div>
       <div id="damage"></div>
       <div id="killfeed"></div>
+      <div id="scope" style="position:absolute; inset:0; display:none; pointer-events:none;">
+        <div style="position:absolute; inset:0;
+          background:
+            radial-gradient(circle at center, transparent 0, transparent 28%, rgba(0,0,0,0.55) 32%, rgba(0,0,0,0.95) 45%, #000 100%);"></div>
+        <div style="position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(0,0,0,0.6);"></div>
+        <div style="position:absolute; top:0; bottom:0; left:50%; width:1px; background:rgba(0,0,0,0.6);"></div>
+        <div style="position:absolute; left:50%; top:50%; width:6px; height:6px; transform:translate(-50%,-50%); border-radius:50%; background:#ff4040;"></div>
+      </div>
       <div id="scoreboard"><table><thead><tr><th>Player</th><th>Score</th><th>HP</th></tr></thead><tbody id="sbBody"></tbody></table></div>
       <div id="score">Score: <b id="scoreVal">0</b></div>
       <div id="stats">

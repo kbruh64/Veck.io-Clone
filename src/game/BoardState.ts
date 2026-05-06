@@ -180,7 +180,7 @@ export class BoardState {
         w.ammoMag += take; w.ammoReserve -= take;
         w.reloading = 0;
       }
-    } else if (input.reload && w.ammoMag < def.magSize && w.ammoReserve > 0) {
+    } else if ((input.reload || w.ammoMag === 0) && w.ammoMag < def.magSize && w.ammoReserve > 0) {
       w.reloading = def.reloadTime;
     }
 
