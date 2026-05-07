@@ -291,6 +291,10 @@ const wssSecure = new WebSocketServer({ server: httpsServer });
 console.log(`[veckio] Gun-Game server: ws://0.0.0.0:${PORT}  +  wss://0.0.0.0:${TLS_PORT}`);
 console.log(`[veckio] Default progression: ${activeProgressionName} → ${chain.join(' → ')}`);
 
+// Spawn 3 bots on startup so any new client immediately has something to fight.
+setBotCount(3);
+console.log(`[veckio] Pre-spawned ${botCount()} bots`);
+
 function onConnection(ws, req) {
   const id = nextId++;
   const [sx, sy, sz] = pickSpawn();
@@ -327,8 +331,10 @@ function onConnection(ws, req) {
         break;
 
       case 'setBots':
+        console.log(`[veckio] setBots from id=${id}: count=${msg.count}`);
         setBotCount(msg.count ?? 0);
         broadcast({ t: 'botCount', count: botCount() });
+        console.log(`[veckio] bot count now=${botCount()} total players=${players.size}`);
         break;
 
       case 'state':
