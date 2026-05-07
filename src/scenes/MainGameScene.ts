@@ -6,6 +6,7 @@ import { loadSettings, Settings } from '../game/Settings';
 import { SettingsMenu } from '../ui/SettingsMenu';
 import { NetClient } from '../net/NetClient';
 import { WEAPONS, WEAPON_ORDER, WeaponId } from '../game/Weapons';
+import { TouchControls } from '../ui/TouchControls';
 
 type Mode = 'sp' | 'mp';
 
@@ -17,6 +18,7 @@ export class MainGameScene extends Phaser.Scene {
   private menu!: SettingsMenu;
   private mode: Mode = 'sp';
   private net: NetClient | null = null;
+  private touch!: TouchControls;
   private xp = 0;
   private level = 1;
 
@@ -56,9 +58,13 @@ export class MainGameScene extends Phaser.Scene {
       if (!this.input$.aiming) this.three.setFovTarget(this.settings.fov);
     });
 
+    this.touch = new TouchControls();
+
     this.attachOverlay();
     this.attachDomInput();
   }
+
+  private isTouch(): boolean { return this.touch?.enabled ?? false; }
 
   private attachOverlay() {
     const overlay = document.getElementById('overlay')!;
@@ -99,10 +105,10 @@ export class MainGameScene extends Phaser.Scene {
 
     overlay.addEventListener('click', e => {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'LABEL') return;
+      if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'LABEL' || tag === 'SELECT' || tag === 'OPTION') return;
       if (this.menu.isOpen()) return;
       if ((this.board.player.hp > 0 || this.net?.connected)) {
-        this.threeCanvas.requestPointerLock();
+        this.engagePlay();
       }
     });
 
@@ -130,7 +136,7 @@ export class MainGameScene extends Phaser.Scene {
     const cls = (document.getElementById('spClass') as HTMLSelectElement)?.value as WeaponId | undefined;
     if (cls && this.board.player.weapons[cls]) this.board.player.current = cls;
     document.getElementById('scoreboard')!.style.display = 'none';
-    this.threeCanvas.requestPointerLock();
+    this.engagePlay();
   }
 
   private async startMultiplayer(url: string, name: string) {
@@ -139,7 +145,18 @@ export class MainGameScene extends Phaser.Scene {
     this.net = new NetClient();
     await this.net.connect(url, name);
     document.getElementById('scoreboard')!.style.display = 'block';
-    this.threeCanvas.requestPointerLock();
+    this.engagePlay();
+  }
+
+  /** Hide the lobby and start playing. Mobile uses touch UI; desktop uses pointer-lock. */
+  private engagePlay() {
+    if (this.isTouch()) {
+      document.getElementById('overlay')!.classList.add('hidden');
+      this.locked = true;
+      this.touch.show(true);
+    } else {
+      this.threeCanvas.requestPointerLock();
+    }
   }
 
   private attachDomInput() {
@@ -294,6 +311,7 @@ export class MainGameScene extends Phaser.Scene {
     if (this.mode === 'sp' && p.hp <= 0) {
       const overlay = document.getElementById('overlay')!;
       overlay.classList.remove('hidden');
+      if (this.isTouch()) { this.touch.show(false); this.locked = false; }
       overlay.querySelector('h1')!.textContent = 'You died';
       const ps = overlay.querySelector('.panel')!.querySelectorAll('p');
       ps[ps.length - 1].innerHTML = `<b>Score ${this.board.score} · best streak ${this.board.bestStreak}</b>`;
@@ -391,6 +409,35 @@ export class MainGameScene extends Phaser.Scene {
     const f = (this.keys[b.forward] ? 1 : 0) - (this.keys[b.back] ? 1 : 0);
     const s = (this.keys[b.right] ? 1 : 0) - (this.keys[b.left] ? 1 : 0);
     this.input$.forward = -f; this.input$.strafe = s;
+
+    if (this.isTouch()) {
+      // Override movement / actions from the on-screen controls when active.
+      this.input$.forward = this.touch.forward;
+      this.input$.strafe = this.touch.strafe;
+      this.input$.shoot = this.touch.shoot;
+      this.input$.aiming = this.touch.aiming;
+      this.three.setAiming(this.touch.aiming);
+      this.three.setFovTarget(this.touch.aiming
+        ? WEAPONS[this.board.player.current].adsFov
+        : this.settings.fov);
+      if (this.touch.consumeJumpEdge()) { this.input$.jumpEdge = true; this.input$.jump = true; }
+      else this.input$.jump = this.touch.jump;
+      if (this.touch.consumeReloadEdge()) this.input$.reload = true;
+      else this.input$.reload = false;
+      if (this.touch.consumeMenuEdge()) {
+        if (this.menu.isOpen()) this.menu.close();
+        else this.menu.open();
+      }
+      // Apply look drag to camera yaw/pitch.
+      const look = this.touch.consumeLook();
+      const sens = 0.0045 * this.settings.sensitivity * (this.touch.aiming ? 0.55 : 1);
+      this.board.player.yaw -= look.dx * sens;
+      const dy = look.dy * sens * (this.settings.invertY ? -1 : 1);
+      this.board.player.pitch -= dy;
+      const lim = Math.PI / 2 - 0.05;
+      if (this.board.player.pitch > lim) this.board.player.pitch = lim;
+      if (this.board.player.pitch < -lim) this.board.player.pitch = -lim;
+    }
 
     const playing = this.locked && !this.menu.isOpen();
     if (playing && this.board.player.hp > 0) {
