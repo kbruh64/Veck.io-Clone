@@ -72,7 +72,7 @@ export class TouchControls {
       pointerEvents: 'none', userSelect: 'none',
       WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
       touchAction: 'none',
-    } as CSSStyleDeclaration);
+    } as Partial<CSSStyleDeclaration>);
     document.body.appendChild(root);
     this.root = root;
 
@@ -84,7 +84,7 @@ export class TouchControls {
       background: 'rgba(255,255,255,0.10)',
       border: '2px solid rgba(255,255,255,0.25)',
       pointerEvents: 'auto',
-    } as CSSStyleDeclaration);
+    } as Partial<CSSStyleDeclaration>);
     root.appendChild(joyBase);
     this.joyBase = joyBase;
 
@@ -96,7 +96,7 @@ export class TouchControls {
       border: '2px solid rgba(255,255,255,0.6)',
       transform: 'translate(-50%, -50%)',
       pointerEvents: 'none',
-    } as CSSStyleDeclaration);
+    } as Partial<CSSStyleDeclaration>);
     joyBase.appendChild(joyKnob);
     this.joyKnob = joyKnob;
 
@@ -110,7 +110,7 @@ export class TouchControls {
         color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: 'system-ui, sans-serif', fontWeight: '600', fontSize: '13px',
         pointerEvents: 'auto', textAlign: 'center', lineHeight: '1.1',
-      } as CSSStyleDeclaration);
+      } as Partial<CSSStyleDeclaration>);
       b.textContent = label;
       root.appendChild(b);
       return b;
@@ -122,7 +122,7 @@ export class TouchControls {
     const reload = btn('R', 110, 160, 56, 56);
     const menu = btn('☰', 24, 24, 44, 44);
     menu.style.left = ''; menu.style.right = '';
-    Object.assign(menu.style, { left: '24px', top: '24px', bottom: 'auto' } as CSSStyleDeclaration);
+    Object.assign(menu.style, { left: '24px', top: '24px', bottom: 'auto' } as Partial<CSSStyleDeclaration>);
 
     this.btnAttach.push({ el: fire,  setter: d => { this.shoot = d; },  touchId: null });
     this.btnAttach.push({ el: ads,   setter: d => { this.aiming = d; }, touchId: null });

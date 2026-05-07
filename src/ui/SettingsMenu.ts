@@ -15,7 +15,7 @@ export class SettingsMenu {
       position: 'absolute', inset: '0', display: 'none',
       alignItems: 'center', justifyContent: 'center',
       background: 'rgba(0,0,0,0.7)', zIndex: '10', pointerEvents: 'auto'
-    } as CSSStyleDeclaration);
+    } as Partial<CSSStyleDeclaration>);
     document.body.appendChild(this.root);
 
     document.addEventListener('keydown', (e) => {

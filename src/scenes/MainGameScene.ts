@@ -42,7 +42,7 @@ export class MainGameScene extends Phaser.Scene {
     this.threeCanvas = document.createElement('canvas');
     Object.assign(this.threeCanvas.style, {
       position: 'absolute', inset: '0', width: '100%', height: '100%', zIndex: '0', display: 'block'
-    } as CSSStyleDeclaration);
+    } as Partial<CSSStyleDeclaration>);
     parent.style.position = 'relative';
     parent.insertBefore(this.threeCanvas, this.game.canvas);
     (this.game.canvas as HTMLCanvasElement).style.pointerEvents = 'none';
