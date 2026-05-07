@@ -388,6 +388,6 @@ setInterval(() => {
   const snap = snapshot();
   const json = JSON.stringify(snap);
   for (const p of players.values()) {
-    if (p.ws.readyState === p.ws.OPEN) p.ws.send(json);
+    if (p.ws && p.ws.readyState === p.ws.OPEN) p.ws.send(json);
   }
 }, 1000 / TICK_HZ);
