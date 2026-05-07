@@ -84,6 +84,10 @@ export class NetClient {
     this.send({ t: 'progression', name });
   }
 
+  sendBots(count: number) {
+    this.send({ t: 'setBots', count });
+  }
+
   private onMessage(raw: string) {
     let msg: any;
     try { msg = JSON.parse(raw); } catch { return; }

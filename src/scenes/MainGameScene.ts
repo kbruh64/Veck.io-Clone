@@ -87,23 +87,31 @@ export class MainGameScene extends Phaser.Scene {
     });
     document.getElementById('mpConnect')!.addEventListener('click', async e => {
       e.stopPropagation();
-      // Default: WebSocket via the same origin & proxy path. Auto-picks ws/wss to match http/https.
-      const defaultUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+      // Default: connect to the WS server directly. Use TLS port (8443) when the page is https,
+      // plain ws on 8080 otherwise, so mobile https pages still work.
+      const isHttps = location.protocol === 'https:';
+      const host = location.hostname || 'localhost';
+      const defaultUrl = isHttps ? `wss://${host}:8443` : `ws://${host}:8080`;
       const url = urlInput.value.trim() || defaultUrl;
       const name = nameInput.value.trim() || 'Player';
       const prog = (document.getElementById('mpProg') as HTMLSelectElement | null)?.value || 'classic';
+      const bots = parseInt((document.getElementById('mpBots') as HTMLSelectElement | null)?.value || '0', 10);
       localStorage.setItem('veckio.name', name);
       localStorage.setItem('veckio.url', url);
       localStorage.setItem('veckio.prog', prog);
+      localStorage.setItem('veckio.bots', String(bots));
       status.textContent = 'Connecting…';
       try {
         await this.startMultiplayer(url, name);
         this.net?.sendProgression(prog);
+        this.net?.sendBots(bots);
         status.textContent = '';
       } catch (err: any) { status.textContent = `Failed: ${err?.message ?? err}`; }
     });
     const savedProg = localStorage.getItem('veckio.prog');
     if (savedProg) (document.getElementById('mpProg') as HTMLSelectElement).value = savedProg;
+    const savedBots = localStorage.getItem('veckio.bots');
+    if (savedBots) (document.getElementById('mpBots') as HTMLSelectElement).value = savedBots;
 
     overlay.addEventListener('click', e => {
       const tag = (e.target as HTMLElement).tagName;
