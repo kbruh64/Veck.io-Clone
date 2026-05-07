@@ -3,3 +3,5 @@ dist
 *.log
 .vite
 .DS_Store
+tsconfig.tsbuildinfo
+.vercel

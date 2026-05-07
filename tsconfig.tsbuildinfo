@@ -1,1 +1,0 @@
-{"root":["./src/main.ts","./src/game/boardstate.ts","./src/game/settings.ts","./src/game/weapons.ts","./src/net/netclient.ts","./src/scenes/bootscene.ts","./src/scenes/maingamescene.ts","./src/scenes/preloadscene.ts","./src/three/threegamerenderer.ts","./src/ui/settingsmenu.ts","./src/ui/touchcontrols.ts"],"version":"5.9.3"}
