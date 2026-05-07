@@ -87,7 +87,9 @@ export class MainGameScene extends Phaser.Scene {
     });
     document.getElementById('mpConnect')!.addEventListener('click', async e => {
       e.stopPropagation();
-      const url = urlInput.value.trim();
+      // Default: WebSocket via the same origin & proxy path. Auto-picks ws/wss to match http/https.
+      const defaultUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+      const url = urlInput.value.trim() || defaultUrl;
       const name = nameInput.value.trim() || 'Player';
       const prog = (document.getElementById('mpProg') as HTMLSelectElement | null)?.value || 'classic';
       localStorage.setItem('veckio.name', name);
