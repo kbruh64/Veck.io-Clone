@@ -9,6 +9,8 @@ import { WebSocketServer } from 'ws';
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const TICK_HZ = 20;
 const RESPAWN_MS = 5000;
+const MATCH_DURATION_MS = 5 * 60 * 1000;
+let matchStartedAt = Date.now();
 
 const PROGRESSIONS = {
   classic:  ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'knife'],
@@ -38,9 +40,11 @@ function broadcast(msg, exceptId) {
 }
 
 function snapshot() {
+  const remainingMs = matchOver ? 0 : Math.max(0, MATCH_DURATION_MS - (Date.now() - matchStartedAt));
   return {
     t: 'snap', ts: Date.now(),
     chain, progression: activeProgressionName,
+    remainingMs, durationMs: MATCH_DURATION_MS,
     players: [...players.values()].map(p => ({
       id: p.id, name: p.name,
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
@@ -52,13 +56,27 @@ function snapshot() {
 
 function startNewMatch() {
   matchOver = false;
+  matchStartedAt = Date.now();
   for (const q of players.values()) {
     q.score = 0; q.level = 0; q.hp = 100; q.alive = true;
     const [sx, sy, sz] = pickSpawn();
     q.x = sx; q.y = sy; q.z = sz;
     send(q.ws, { t: 'respawn', x: sx, y: sy, z: sz, level: 0 });
   }
-  broadcast({ t: 'match_start', chain, progression: activeProgressionName });
+  broadcast({ t: 'match_start', chain, progression: activeProgressionName, durationMs: MATCH_DURATION_MS });
+}
+
+function endMatchByTime() {
+  if (matchOver || players.size === 0) return;
+  matchOver = true;
+  const ranked = [...players.values()]
+    .map(q => ({ id: q.id, name: q.name, score: q.score, level: q.level }))
+    .sort((a, b) => b.level - a.level || b.score - a.score);
+  const winner = ranked[0] ? { id: ranked[0].id, name: ranked[0].name, score: ranked[0].score } : null;
+  for (const q of players.values()) {
+    send(q.ws, { t: 'match_over', winner, scores: ranked, resetIn: 8, reason: 'time' });
+  }
+  setTimeout(startNewMatch, 8000);
 }
 
 const wss = new WebSocketServer({ port: PORT });
@@ -77,7 +95,7 @@ wss.on('connection', (ws, req) => {
   players.set(id, player);
   console.log(`[veckio] +join id=${id} (${players.size} online) ip=${req.socket.remoteAddress}`);
 
-  send(ws, { t: 'welcome', id, snap: snapshot(), chain, progression: activeProgressionName, respawnMs: RESPAWN_MS });
+  send(ws, { t: 'welcome', id, snap: snapshot(), chain, progression: activeProgressionName, respawnMs: RESPAWN_MS, durationMs: MATCH_DURATION_MS });
   broadcast({ t: 'join', player: { id, name: player.name } }, id);
 
   ws.on('message', (data) => {
@@ -167,6 +185,7 @@ wss.on('connection', (ws, req) => {
 
 setInterval(() => {
   const now = Date.now();
+  if (!matchOver && now - matchStartedAt >= MATCH_DURATION_MS) endMatchByTime();
   for (const p of players.values()) {
     if (!p.alive && now >= p.respawnAt && !matchOver) {
       const [sx, sy, sz] = pickSpawn();

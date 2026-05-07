@@ -286,6 +286,20 @@ export class MainGameScene extends Phaser.Scene {
       set('ammo', `${w.ammoMag} / ${w.ammoReserve}` + (w.reloading > 0 ? ' (reloading)' : ''));
     }
     set('streak', `${this.board.killstreak} (best ${this.board.bestStreak})  ·  Lv ${this.level} · ${this.xp} XP`);
+
+    const timerEl = document.getElementById('timer');
+    if (timerEl) {
+      if (this.mode === 'mp' && this.net?.connected) {
+        const ms = Math.max(0, this.net.remainingMs);
+        const m = Math.floor(ms / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        timerEl.style.color = ms < 30000 ? '#ff8080' : '#fff';
+        timerEl.style.display = 'block';
+      } else {
+        timerEl.style.display = 'none';
+      }
+    }
     set('enemies', String(this.mode === 'mp' ? Math.max(0, (this.net?.players.size ?? 1) - 1) : this.board.enemies.filter(e => e.alive).length));
     set('scoreVal', String(this.board.score));
 

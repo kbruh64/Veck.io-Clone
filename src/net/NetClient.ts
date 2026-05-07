@@ -27,6 +27,8 @@ export class NetClient {
   chain: string[] = [];
   progressionName = 'classic';
   respawnMs = 5000;
+  remainingMs = 0;
+  durationMs = 5 * 60 * 1000;
   private lastStateSent = 0;
 
   connect(url: string, name: string): Promise<void> {
@@ -92,12 +94,15 @@ export class NetClient {
         if (Array.isArray(msg.chain)) this.chain = msg.chain;
         if (msg.progression) this.progressionName = msg.progression;
         if (msg.respawnMs) this.respawnMs = msg.respawnMs;
+        if (msg.durationMs) this.durationMs = msg.durationMs;
         this.applySnap(msg.snap);
         this.events.push({ t: 'welcome', id: msg.id });
         break;
       case 'snap':
         if (Array.isArray(msg.chain)) this.chain = msg.chain;
         if (msg.progression) this.progressionName = msg.progression;
+        if (typeof msg.remainingMs === 'number') this.remainingMs = msg.remainingMs;
+        if (typeof msg.durationMs === 'number') this.durationMs = msg.durationMs;
         this.applySnap(msg);
         break;
       case 'progression':
