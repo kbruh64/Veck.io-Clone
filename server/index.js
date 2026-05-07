@@ -1,32 +1,34 @@
-// Minimal authoritative-ish multiplayer server for Veck.io Clone.
-// - Clients send their position/orientation each tick (client-authoritative movement).
-// - Server owns hp, score, deaths, respawns, and broadcasts snapshots @ 20Hz.
-// - Hit detection happens client-side; clients send {t:'hit', target, dmg}.
-//   Server validates plausibility (target alive, attacker alive, distance sane) and applies damage.
+// Gun-Game multiplayer server for Veck.io Clone.
+// - Each player advances through a weapon progression on every kill.
+// - First to finish the chain wins; match resets after 8s.
+// - 5-second respawn on death.
+// - Hits arrive from clients ({t:'hit'}); server validates plausibility and applies damage.
 
 import { WebSocketServer } from 'ws';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const TICK_HZ = 20;
-const KILL_LIMIT = 25;
-let matchOver = false;
-let matchWinner = null;
+const RESPAWN_MS = 5000;
+
+const PROGRESSIONS = {
+  classic:  ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'knife'],
+  brawler:  ['smg', 'shotgun', 'rifle', 'knife'],
+  marksman: ['pistol', 'rifle', 'sniper', 'knife'],
+};
+let activeProgressionName = 'classic';
+let chain = PROGRESSIONS[activeProgressionName];
+
 const SPAWN_POINTS = [
   [ 8, 1.7,  8], [-8, 1.7,  8], [ 8, 1.7, -8], [-8, 1.7, -8],
   [ 0, 1.7, 12], [ 0, 1.7,-12], [12, 1.7,  0], [-12, 1.7, 0],
 ];
 
 let nextId = 1;
-const players = new Map(); // id -> { id, name, ws, x, y, z, yaw, pitch, hp, score, alive, respawnAt }
+const players = new Map();
+let matchOver = false;
 
-function pickSpawn() {
-  return SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
-}
-
-function send(ws, msg) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-}
-
+function pickSpawn() { return SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]; }
+function send(ws, msg) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); }
 function broadcast(msg, exceptId) {
   const json = JSON.stringify(msg);
   for (const p of players.values()) {
@@ -37,20 +39,31 @@ function broadcast(msg, exceptId) {
 
 function snapshot() {
   return {
-    t: 'snap',
-    ts: Date.now(),
+    t: 'snap', ts: Date.now(),
+    chain, progression: activeProgressionName,
     players: [...players.values()].map(p => ({
       id: p.id, name: p.name,
-      x: p.x, y: p.y, z: p.z,
-      yaw: p.yaw, pitch: p.pitch,
-      hp: p.hp, score: p.score, alive: p.alive
+      x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
+      hp: p.hp, score: p.score, alive: p.alive,
+      level: p.level, weapon: chain[Math.min(p.level, chain.length - 1)],
     })),
   };
 }
 
+function startNewMatch() {
+  matchOver = false;
+  for (const q of players.values()) {
+    q.score = 0; q.level = 0; q.hp = 100; q.alive = true;
+    const [sx, sy, sz] = pickSpawn();
+    q.x = sx; q.y = sy; q.z = sz;
+    send(q.ws, { t: 'respawn', x: sx, y: sy, z: sz, level: 0 });
+  }
+  broadcast({ t: 'match_start', chain, progression: activeProgressionName });
+}
+
 const wss = new WebSocketServer({ port: PORT });
-console.log(`[veckio] WS server listening on ws://0.0.0.0:${PORT}`);
-console.log(`[veckio] LAN clients: connect to ws://<your-LAN-IP>:${PORT}`);
+console.log(`[veckio] Gun-Game server on ws://0.0.0.0:${PORT}`);
+console.log(`[veckio] Default progression: ${activeProgressionName} → ${chain.join(' → ')}`);
 
 wss.on('connection', (ws, req) => {
   const id = nextId++;
@@ -59,16 +72,16 @@ wss.on('connection', (ws, req) => {
     id, name: `Player${id}`, ws,
     x: sx, y: sy, z: sz, yaw: 0, pitch: 0,
     hp: 100, score: 0, alive: true, respawnAt: 0,
+    level: 0,
   };
   players.set(id, player);
   console.log(`[veckio] +join id=${id} (${players.size} online) ip=${req.socket.remoteAddress}`);
 
-  send(ws, { t: 'welcome', id, snap: snapshot(), killLimit: KILL_LIMIT });
-  broadcast({ t: 'join', player: { id, name: player.name, x: sx, y: sy, z: sz } }, id);
+  send(ws, { t: 'welcome', id, snap: snapshot(), chain, progression: activeProgressionName, respawnMs: RESPAWN_MS });
+  broadcast({ t: 'join', player: { id, name: player.name } }, id);
 
   ws.on('message', (data) => {
-    let msg;
-    try { msg = JSON.parse(data.toString()); } catch { return; }
+    let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
     const p = players.get(id);
     if (!p) return;
 
@@ -76,6 +89,15 @@ wss.on('connection', (ws, req) => {
       case 'name':
         if (typeof msg.name === 'string' && msg.name.length > 0 && msg.name.length < 24) {
           p.name = msg.name.replace(/[^\w \-_.]/g, '').slice(0, 24) || p.name;
+        }
+        break;
+
+      case 'progression':
+        // Any client can change progression between matches (for prototyping).
+        if (typeof msg.name === 'string' && PROGRESSIONS[msg.name]) {
+          activeProgressionName = msg.name;
+          chain = PROGRESSIONS[activeProgressionName];
+          broadcast({ t: 'progression', name: activeProgressionName, chain });
         }
         break;
 
@@ -88,49 +110,45 @@ wss.on('connection', (ws, req) => {
         break;
 
       case 'shoot':
-        // Pure visual relay so others can see the tracer.
-        broadcast({ t: 'shoot', by: id,
-          from: msg.from, to: msg.to }, id);
+        broadcast({ t: 'shoot', by: id, from: msg.from, to: msg.to, weapon: chain[Math.min(p.level, chain.length - 1)] }, id);
         break;
 
       case 'hit': {
-        if (!p.alive) break;
+        if (!p.alive || matchOver) break;
         const target = players.get(msg.target);
         if (!target || !target.alive || target.id === id) break;
-        // Plausibility: must be reasonably close to claimed hit (anti-griefing).
         const dx = target.x - p.x, dy = target.y - p.y, dz = target.z - p.z;
         const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (dist > 80) break;
-        const dmg = Math.max(0, Math.min(50, msg.dmg ?? 30));
+        const dmg = Math.max(0, Math.min(120, msg.dmg ?? 30));
         target.hp -= dmg;
         send(target.ws, { t: 'damaged', by: id, dmg, hp: Math.max(0, target.hp) });
         if (target.hp <= 0) {
-          target.alive = false;
-          target.hp = 0;
-          target.respawnAt = Date.now() + 3000;
+          target.alive = false; target.hp = 0;
+          target.respawnAt = Date.now() + RESPAWN_MS;
+          // Knife "humiliation": victim drops one level (not below 0).
+          const attackerWeapon = chain[Math.min(p.level, chain.length - 1)];
+          if (attackerWeapon === 'knife' && target.level > 0) target.level -= 1;
+          // Advance attacker.
           p.score += 1;
-          broadcast({ t: 'killed', by: id, victim: target.id, byName: p.name, victimName: target.name });
-          if (!matchOver && p.score >= KILL_LIMIT) {
+          p.level += 1;
+          broadcast({ t: 'killed',
+            by: id, victim: target.id,
+            byName: p.name, victimName: target.name,
+            byLevel: p.level, victimLevel: target.level,
+            weapon: attackerWeapon,
+            chainLen: chain.length,
+          });
+          if (p.level >= chain.length) {
             matchOver = true;
-            matchWinner = { id: p.id, name: p.name, score: p.score };
             const finalScores = [...players.values()]
-              .map(q => ({ id: q.id, name: q.name, score: q.score }))
-              .sort((a, b) => b.score - a.score);
+              .map(q => ({ id: q.id, name: q.name, score: q.score, level: q.level }))
+              .sort((a, b) => b.level - a.level || b.score - a.score);
+            const winner = { id: p.id, name: p.name, score: p.score };
             for (const q of players.values()) {
-              send(q.ws, { t: 'match_over', winner: matchWinner, scores: finalScores, resetIn: 8 });
+              send(q.ws, { t: 'match_over', winner, scores: finalScores, resetIn: 8 });
             }
-            setTimeout(() => {
-              for (const q of players.values()) q.score = 0;
-              matchOver = false;
-              matchWinner = null;
-              for (const q of players.values()) {
-                const [sx, sy, sz] = pickSpawn();
-                q.x = sx; q.y = sy; q.z = sz;
-                q.hp = 100; q.alive = true;
-                send(q.ws, { t: 'respawn', x: sx, y: sy, z: sz });
-              }
-              broadcast({ t: 'match_start', killLimit: KILL_LIMIT });
-            }, 8000);
+            setTimeout(startNewMatch, 8000);
           }
         }
         break;
@@ -147,15 +165,14 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => {});
 });
 
-// Tick: handle respawns + broadcast snapshot.
 setInterval(() => {
   const now = Date.now();
   for (const p of players.values()) {
-    if (!p.alive && now >= p.respawnAt) {
+    if (!p.alive && now >= p.respawnAt && !matchOver) {
       const [sx, sy, sz] = pickSpawn();
       p.x = sx; p.y = sy; p.z = sz;
       p.hp = 100; p.alive = true;
-      send(p.ws, { t: 'respawn', x: sx, y: sy, z: sz });
+      send(p.ws, { t: 'respawn', x: sx, y: sy, z: sz, level: p.level });
     }
   }
   const snap = snapshot();

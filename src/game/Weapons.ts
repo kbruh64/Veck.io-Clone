@@ -1,8 +1,10 @@
-export type WeaponId = 'pistol' | 'smg' | 'shotgun' | 'sniper';
+export type WeaponId = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'sniper' | 'knife';
+export type WeaponClass = 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'sniper' | 'melee';
 
 export interface WeaponDef {
   id: WeaponId;
   name: string;
+  klass: WeaponClass;
   damage: number;        // per pellet
   pellets: number;       // 1 for non-shotguns
   fireCooldown: number;  // seconds between shots
@@ -14,40 +16,62 @@ export interface WeaponDef {
   adsFov: number;        // degrees
   range: number;
   auto: boolean;         // hold-to-fire
+  melee?: boolean;
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pistol: {
-    id: 'pistol', name: 'Pistol',
+    id: 'pistol', name: 'Pistol', klass: 'pistol',
     damage: 25, pellets: 1, fireCooldown: 0.18,
     magSize: 12, reserveMax: 96, reloadTime: 3.0,
     spreadHip: 0.012, spreadAds: 0.0, adsFov: 50,
     range: 80, auto: false,
   },
   smg: {
-    id: 'smg', name: 'SMG',
+    id: 'smg', name: 'SMG', klass: 'smg',
     damage: 14, pellets: 1, fireCooldown: 0.06,
     magSize: 30, reserveMax: 150, reloadTime: 3.0,
     spreadHip: 0.045, spreadAds: 0.012, adsFov: 55,
     range: 60, auto: true,
   },
+  rifle: {
+    id: 'rifle', name: 'Rifle', klass: 'rifle',
+    damage: 22, pellets: 1, fireCooldown: 0.11,
+    magSize: 24, reserveMax: 120, reloadTime: 3.0,
+    spreadHip: 0.022, spreadAds: 0.004, adsFov: 50,
+    range: 100, auto: true,
+  },
   shotgun: {
-    id: 'shotgun', name: 'Shotgun',
+    id: 'shotgun', name: 'Shotgun', klass: 'shotgun',
     damage: 12, pellets: 8, fireCooldown: 0.75,
     magSize: 6, reserveMax: 36, reloadTime: 3.0,
     spreadHip: 0.13, spreadAds: 0.07, adsFov: 60,
     range: 30, auto: false,
   },
   sniper: {
-    id: 'sniper', name: 'Sniper',
+    id: 'sniper', name: 'Sniper', klass: 'sniper',
     damage: 90, pellets: 1, fireCooldown: 1.1,
     magSize: 5, reserveMax: 25, reloadTime: 3.0,
     spreadHip: 0.06, spreadAds: 0.0, adsFov: 18,
     range: 200, auto: false,
   },
+  knife: {
+    id: 'knife', name: 'Knife', klass: 'melee',
+    damage: 100, pellets: 1, fireCooldown: 0.45,
+    magSize: 9999, reserveMax: 0, reloadTime: 0,
+    spreadHip: 0, spreadAds: 0, adsFov: 75,
+    range: 2.6, auto: false, melee: true,
+  },
 };
 
-export const WEAPON_ORDER: WeaponId[] = ['pistol', 'smg', 'shotgun', 'sniper'];
+export const WEAPON_ORDER: WeaponId[] = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'knife'];
+
+/** Built-in gun-game progressions. */
+export const PROGRESSIONS: Record<string, WeaponId[]> = {
+  classic:  ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'knife'],
+  brawler:  ['smg', 'shotgun', 'rifle', 'knife'],
+  marksman: ['pistol', 'rifle', 'sniper', 'knife'],
+};
 
 export interface WeaponState {
   id: WeaponId;

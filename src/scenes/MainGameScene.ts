@@ -83,12 +83,19 @@ export class MainGameScene extends Phaser.Scene {
       e.stopPropagation();
       const url = urlInput.value.trim();
       const name = nameInput.value.trim() || 'Player';
+      const prog = (document.getElementById('mpProg') as HTMLSelectElement | null)?.value || 'classic';
       localStorage.setItem('veckio.name', name);
       localStorage.setItem('veckio.url', url);
+      localStorage.setItem('veckio.prog', prog);
       status.textContent = 'Connecting…';
-      try { await this.startMultiplayer(url, name); status.textContent = ''; }
-      catch (err: any) { status.textContent = `Failed: ${err?.message ?? err}`; }
+      try {
+        await this.startMultiplayer(url, name);
+        this.net?.sendProgression(prog);
+        status.textContent = '';
+      } catch (err: any) { status.textContent = `Failed: ${err?.message ?? err}`; }
     });
+    const savedProg = localStorage.getItem('veckio.prog');
+    if (savedProg) (document.getElementById('mpProg') as HTMLSelectElement).value = savedProg;
 
     overlay.addEventListener('click', e => {
       const tag = (e.target as HTMLElement).tagName;
@@ -100,7 +107,10 @@ export class MainGameScene extends Phaser.Scene {
     });
 
     document.querySelectorAll<HTMLDivElement>('#weaponBar .wslot').forEach(el => {
-      el.addEventListener('click', () => this.board.switchWeapon(el.dataset.w as WeaponId));
+      el.addEventListener('click', () => {
+        if (this.mode === 'mp') return;
+        this.board.switchWeapon(el.dataset.w as WeaponId);
+      });
     });
   }
 
@@ -117,6 +127,8 @@ export class MainGameScene extends Phaser.Scene {
     this.mode = 'sp';
     this.net?.disconnect(); this.net = null;
     this.resetWorld(true);
+    const cls = (document.getElementById('spClass') as HTMLSelectElement)?.value as WeaponId | undefined;
+    if (cls && this.board.player.weapons[cls]) this.board.player.current = cls;
     document.getElementById('scoreboard')!.style.display = 'none';
     this.threeCanvas.requestPointerLock();
   }
@@ -175,9 +187,9 @@ export class MainGameScene extends Phaser.Scene {
       }
     });
 
-    // Scroll wheel cycles weapons.
+    // Scroll wheel cycles weapons (singleplayer only).
     document.addEventListener('wheel', e => {
-      if (!this.locked) return;
+      if (!this.locked || this.mode === 'mp') return;
       this.board.cycleWeapon(e.deltaY > 0 ? 1 : -1);
     }, { passive: true });
 
@@ -192,10 +204,13 @@ export class MainGameScene extends Phaser.Scene {
       if (e.code === b.sprint) this.input$.sprint = true;
       if (e.code === b.slide) this.input$.slide = true;
       if (e.code === b.scoreboard) this.showScoreboard = true;
-      if (e.code === b.weapon1) this.board.switchWeapon('pistol');
-      if (e.code === b.weapon2) this.board.switchWeapon('smg');
-      if (e.code === b.weapon3) this.board.switchWeapon('shotgun');
-      if (e.code === b.weapon4) this.board.switchWeapon('sniper');
+      // Disable manual weapon switching in multiplayer (server-authoritative).
+      if (this.mode !== 'mp') {
+        if (e.code === b.weapon1) this.board.switchWeapon('pistol');
+        if (e.code === b.weapon2) this.board.switchWeapon('smg');
+        if (e.code === b.weapon3) this.board.switchWeapon('shotgun');
+        if (e.code === b.weapon4) this.board.switchWeapon('sniper');
+      }
       if (e.code === b.settings) {
         if (this.locked || !this.menu.isOpen()) setTimeout(() => this.menu.open(), 30);
         else this.menu.close();
@@ -240,8 +255,19 @@ export class MainGameScene extends Phaser.Scene {
     const w = p.weapons[p.current];
     const set = (id: string, v: string) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('hp', String(Math.ceil(p.hp)));
-    set('weapon', WEAPONS[p.current].name);
-    set('ammo', `${w.ammoMag} / ${w.ammoReserve}` + (w.reloading > 0 ? ' (reloading)' : ''));
+    if (this.mode === 'mp' && this.net) {
+      const me = this.net.players.get(this.net.selfId);
+      const lvl = me?.level ?? 0;
+      const total = this.net.chain.length || 6;
+      set('weapon', `${WEAPONS[p.current].name}  ·  Lv ${Math.min(lvl, total - 1) + 1}/${total}`);
+    } else {
+      set('weapon', WEAPONS[p.current].name);
+    }
+    if (WEAPONS[p.current].melee) {
+      set('ammo', '∞');
+    } else {
+      set('ammo', `${w.ammoMag} / ${w.ammoReserve}` + (w.reloading > 0 ? ' (reloading)' : ''));
+    }
     set('streak', `${this.board.killstreak} (best ${this.board.bestStreak})  ·  Lv ${this.level} · ${this.xp} XP`);
     set('enemies', String(this.mode === 'mp' ? Math.max(0, (this.net?.players.size ?? 1) - 1) : this.board.enemies.filter(e => e.alive).length));
     set('scoreVal', String(this.board.score));
@@ -249,6 +275,8 @@ export class MainGameScene extends Phaser.Scene {
     document.querySelectorAll<HTMLDivElement>('#weaponBar .wslot').forEach(el => {
       el.classList.toggle('active', el.dataset.w === p.current);
     });
+    const wbar = document.getElementById('weaponBar');
+    if (wbar) wbar.style.display = (this.mode === 'mp') ? 'none' : 'flex';
 
     const sb = document.getElementById('scoreboard')!;
     if (this.mode === 'mp' && this.net && (this.showScoreboard || true)) {
@@ -316,8 +344,9 @@ export class MainGameScene extends Phaser.Scene {
           }
           this.board.notifyDeath();
           break;
-        case 'killed':
-          this.addKillfeed(`${ev.byName} ▸ ${ev.victimName}`);
+        case 'killed': {
+          const wpn = (ev as any).weapon ? ` [${(ev as any).weapon}]` : '';
+          this.addKillfeed(`${ev.byName} ▸ ${ev.victimName}${wpn}`);
           if (ev.by === this.net.selfId) {
             this.board.killstreak += 1;
             if (this.board.killstreak > this.board.bestStreak) this.board.bestStreak = this.board.killstreak;
@@ -325,6 +354,7 @@ export class MainGameScene extends Phaser.Scene {
           }
           if (ev.victim === this.net.selfId) this.board.notifyDeath();
           break;
+        }
         case 'shoot':
           if (ev.by !== this.net.selfId) {
             this.three.spawnBullet(
@@ -427,6 +457,16 @@ export class MainGameScene extends Phaser.Scene {
     this.lastShotHeld = this.input$.shoot;
 
     if (this.mode === 'mp' && this.net?.connected) {
+      // Server-authoritative weapon: force player.current from server level.
+      const me = this.net.players.get(this.net.selfId);
+      if (me && this.net.chain.length > 0) {
+        const idx = Math.min(me.level, this.net.chain.length - 1);
+        const forced = this.net.chain[idx] as WeaponId;
+        if (this.board.player.weapons[forced] && this.board.player.current !== forced) {
+          this.board.player.current = forced;
+          this.board.player.switchCooldown = 0;
+        }
+      }
       const p = this.board.player;
       this.net.sendState(p.position.x, p.position.y, p.position.z, p.yaw, p.pitch);
       this.handleNetEvents();

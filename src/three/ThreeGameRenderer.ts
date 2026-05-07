@@ -122,7 +122,8 @@ export class ThreeGameRenderer {
   private buildViewmodel(id: WeaponId): THREE.Group {
     const g = new THREE.Group();
     const accentColor: Record<WeaponId, number> = {
-      pistol: 0x7fd1ff, smg: 0xffd470, shotgun: 0xff8a5b, sniper: 0x9bff7f,
+      pistol: 0x7fd1ff, smg: 0xffd470, rifle: 0xff70cc,
+      shotgun: 0xff8a5b, sniper: 0x9bff7f, knife: 0xeeeeee,
     };
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c1f26, metalness: 0.5, roughness: 0.4, transparent: true, opacity: 1 });
     const accentMat = new THREE.MeshStandardMaterial({
@@ -135,8 +136,10 @@ export class ThreeGameRenderer {
     const profile: Record<WeaponId, { body: [number, number, number]; barrelLen: number; barrelRad: number; sightSize: number }> = {
       pistol:  { body: [0.12, 0.16, 0.32], barrelLen: 0.22, barrelRad: 0.028, sightSize: 0.035 },
       smg:     { body: [0.14, 0.16, 0.50], barrelLen: 0.34, barrelRad: 0.030, sightSize: 0.040 },
+      rifle:   { body: [0.14, 0.18, 0.72], barrelLen: 0.50, barrelRad: 0.030, sightSize: 0.045 },
       shotgun: { body: [0.18, 0.18, 0.78], barrelLen: 0.55, barrelRad: 0.055, sightSize: 0.040 },
       sniper:  { body: [0.14, 0.20, 1.05], barrelLen: 0.85, barrelRad: 0.034, sightSize: 0.060 },
+      knife:   { body: [0.04, 0.04, 0.08], barrelLen: 0.0,  barrelRad: 0.001, sightSize: 0.001 },
     };
     const pr = profile[id];
     const body = new THREE.Mesh(new THREE.BoxGeometry(pr.body[0], pr.body[1], pr.body[2]), bodyMat);
@@ -151,6 +154,23 @@ export class ThreeGameRenderer {
     const sight = new THREE.Mesh(new THREE.BoxGeometry(pr.sightSize, pr.sightSize, pr.sightSize * 1.6), accentMat);
     sight.position.set(0, pr.body[1] / 2 + pr.sightSize / 2, -pr.body[2] / 2 - 0.05);
     g.add(sight);
+
+    if (id === 'knife') {
+      // Replace gun shape with a blade.
+      g.clear();
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.18), bodyMat);
+      handle.position.set(0, 0, -0.1);
+      g.add(handle);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.30), accentMat);
+      blade.position.set(0, 0.005, -0.34);
+      g.add(blade);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.08, 6), accentMat);
+      tip.rotation.x = -Math.PI / 2;
+      tip.position.set(0, 0.005, -0.53);
+      g.add(tip);
+      g.position.set(0.20, this.gunBaseY + 0.02, -0.32);
+      return g;
+    }
 
     if (id === 'sniper') {
       // Scope tube on top.

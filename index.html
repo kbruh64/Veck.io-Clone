@@ -111,10 +111,22 @@
         <p>Browser FPS prototype — Phaser shell + Three.js renderer.</p>
         <p><span class="keys">WASD</span> move &nbsp; <span class="keys">Space</span> jump &nbsp; <span class="keys">Shift</span> sprint</p>
         <p><span class="keys">Mouse</span> aim &nbsp; <span class="keys">Click</span> shoot &nbsp; <span class="keys">R</span> reload</p>
-        <div id="modeBtns" style="display:flex; gap:10px; justify-content:center; margin:14px 0 6px;">
+        <div id="modeBtns" style="display:flex; gap:10px; justify-content:center; margin:14px 0 6px; flex-wrap:wrap;">
           <button id="playSP" class="primary-btn">Singleplayer</button>
-          <button id="playMP" class="primary-btn">Multiplayer</button>
+          <button id="playMP" class="primary-btn">Gun Game (MP)</button>
           <button id="openSettings" class="ghost-btn">Settings</button>
+        </div>
+        <div style="margin-top:8px; font-size:13px;">
+          <label>Starting weapon class:
+            <select id="spClass" style="background:#0e1219; color:#e8ecf1; border:1px solid #38404f; border-radius:5px; padding:4px;">
+              <option value="smg">SMG</option>
+              <option value="pistol">Pistol</option>
+              <option value="rifle">Rifle</option>
+              <option value="shotgun">Shotgun</option>
+              <option value="sniper">Sniper</option>
+              <option value="knife">Knife</option>
+            </select>
+          </label>
         </div>
         <div id="mpForm" style="display:none; margin-top:10px; text-align:left; font-size:13px;">
           <div style="margin:6px 0;">
@@ -122,6 +134,15 @@
           </div>
           <div style="margin:6px 0;">
             <label>Name<br><input id="mpName" value="" placeholder="Player" style="width:100%;padding:6px;border-radius:5px;border:1px solid #38404f;background:#0e1219;color:#e8ecf1;font-family:inherit;"></label>
+          </div>
+          <div style="margin:6px 0;">
+            <label>Progression<br>
+              <select id="mpProg" style="width:100%;padding:6px;border-radius:5px;border:1px solid #38404f;background:#0e1219;color:#e8ecf1;font-family:inherit;">
+                <option value="classic">Classic — Pistol → SMG → Rifle → Shotgun → Sniper → Knife</option>
+                <option value="brawler">Brawler — SMG → Shotgun → Rifle → Knife</option>
+                <option value="marksman">Marksman — Pistol → Rifle → Sniper → Knife</option>
+              </select>
+            </label>
           </div>
           <div style="display:flex; gap:8px; margin-top:8px;">
             <button id="mpConnect" class="primary-btn" style="flex:1;">Connect</button>

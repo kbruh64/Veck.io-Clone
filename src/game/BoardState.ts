@@ -76,8 +76,10 @@ export class BoardState {
       weapons: {
         pistol: makeWeaponState('pistol'),
         smg: makeWeaponState('smg'),
+        rifle: makeWeaponState('rifle'),
         shotgun: makeWeaponState('shotgun'),
         sniper: makeWeaponState('sniper'),
+        knife: makeWeaponState('knife'),
       },
       current: 'smg',
       switchCooldown: 0,

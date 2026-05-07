@@ -3,7 +3,7 @@ export interface RemotePlayer {
   x: number; y: number; z: number;
   yaw: number; pitch: number;
   hp: number; score: number; alive: boolean;
-  // Interpolation buffer: previous and target.
+  level: number; weapon: string;
   prevX: number; prevY: number; prevZ: number;
   prevYaw: number; prevPitch: number;
   lerpStart: number; lerpEnd: number;
@@ -24,6 +24,9 @@ export class NetClient {
   events: NetEvent[] = [];
   connected = false;
   error: string | null = null;
+  chain: string[] = [];
+  progressionName = 'classic';
+  respawnMs = 5000;
   private lastStateSent = 0;
 
   connect(url: string, name: string): Promise<void> {
@@ -75,6 +78,10 @@ export class NetClient {
     this.send({ t: 'hit', target, dmg });
   }
 
+  sendProgression(name: string) {
+    this.send({ t: 'progression', name });
+  }
+
   private onMessage(raw: string) {
     let msg: any;
     try { msg = JSON.parse(raw); } catch { return; }
@@ -82,11 +89,21 @@ export class NetClient {
     switch (msg.t) {
       case 'welcome':
         this.selfId = msg.id;
+        if (Array.isArray(msg.chain)) this.chain = msg.chain;
+        if (msg.progression) this.progressionName = msg.progression;
+        if (msg.respawnMs) this.respawnMs = msg.respawnMs;
         this.applySnap(msg.snap);
         this.events.push({ t: 'welcome', id: msg.id });
         break;
       case 'snap':
+        if (Array.isArray(msg.chain)) this.chain = msg.chain;
+        if (msg.progression) this.progressionName = msg.progression;
         this.applySnap(msg);
+        break;
+      case 'progression':
+        if (Array.isArray(msg.chain)) this.chain = msg.chain;
+        if (msg.name) this.progressionName = msg.name;
+        this.events.push(msg);
         break;
       case 'damaged':
       case 'respawn':
@@ -109,6 +126,7 @@ export class NetClient {
           id: sp.id, name: sp.name,
           x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw, pitch: sp.pitch,
           hp: sp.hp, score: sp.score, alive: sp.alive,
+          level: sp.level ?? 0, weapon: sp.weapon ?? 'pistol',
           prevX: sp.x, prevY: sp.y, prevZ: sp.z, prevYaw: sp.yaw, prevPitch: sp.pitch,
           lerpStart: now, lerpEnd: now,
         };
@@ -119,9 +137,11 @@ export class NetClient {
         rp.x = sp.x; rp.y = sp.y; rp.z = sp.z;
         rp.yaw = sp.yaw; rp.pitch = sp.pitch;
         rp.hp = sp.hp; rp.score = sp.score; rp.alive = sp.alive;
+        rp.level = sp.level ?? rp.level;
+        rp.weapon = sp.weapon ?? rp.weapon;
         rp.name = sp.name;
         rp.lerpStart = now;
-        rp.lerpEnd = now + 100; // matches server tick @ ~20Hz with a small buffer
+        rp.lerpEnd = now + 100;
       }
     }
     // Drop disappeared players.
