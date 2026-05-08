@@ -122,8 +122,11 @@ export class ThreeGameRenderer {
   private buildViewmodel(id: WeaponId): THREE.Group {
     const g = new THREE.Group();
     const accentColor: Record<WeaponId, number> = {
-      pistol: 0x7fd1ff, smg: 0xffd470, rifle: 0xff70cc,
-      shotgun: 0xff8a5b, sniper: 0x9bff7f, knife: 0xeeeeee,
+      pistol: 0x7fd1ff, magnum: 0xffaa00,
+      smg: 0xffd470, rifle: 0xff70cc, ar: 0xc070ff,
+      shotgun: 0xff8a5b, sniper: 0x9bff7f,
+      knife: 0xeeeeee, bat: 0xb37a3a,
+      grenade: 0x77dd55,
     };
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c1f26, metalness: 0.5, roughness: 0.4, transparent: true, opacity: 1 });
     const accentMat = new THREE.MeshStandardMaterial({
@@ -135,11 +138,15 @@ export class ThreeGameRenderer {
     // Different proportions per weapon.
     const profile: Record<WeaponId, { body: [number, number, number]; barrelLen: number; barrelRad: number; sightSize: number }> = {
       pistol:  { body: [0.12, 0.16, 0.32], barrelLen: 0.22, barrelRad: 0.028, sightSize: 0.035 },
+      magnum:  { body: [0.14, 0.18, 0.40], barrelLen: 0.30, barrelRad: 0.038, sightSize: 0.040 },
       smg:     { body: [0.14, 0.16, 0.50], barrelLen: 0.34, barrelRad: 0.030, sightSize: 0.040 },
       rifle:   { body: [0.14, 0.18, 0.72], barrelLen: 0.50, barrelRad: 0.030, sightSize: 0.045 },
+      ar:      { body: [0.16, 0.18, 0.80], barrelLen: 0.55, barrelRad: 0.032, sightSize: 0.045 },
       shotgun: { body: [0.18, 0.18, 0.78], barrelLen: 0.55, barrelRad: 0.055, sightSize: 0.040 },
       sniper:  { body: [0.14, 0.20, 1.05], barrelLen: 0.85, barrelRad: 0.034, sightSize: 0.060 },
       knife:   { body: [0.04, 0.04, 0.08], barrelLen: 0.0,  barrelRad: 0.001, sightSize: 0.001 },
+      bat:     { body: [0.06, 0.06, 0.10], barrelLen: 0.0,  barrelRad: 0.001, sightSize: 0.001 },
+      grenade: { body: [0.10, 0.10, 0.10], barrelLen: 0.0,  barrelRad: 0.001, sightSize: 0.001 },
     };
     const pr = profile[id];
     const body = new THREE.Mesh(new THREE.BoxGeometry(pr.body[0], pr.body[1], pr.body[2]), bodyMat);
@@ -155,6 +162,31 @@ export class ThreeGameRenderer {
     sight.position.set(0, pr.body[1] / 2 + pr.sightSize / 2, -pr.body[2] / 2 - 0.05);
     g.add(sight);
 
+    if (id === 'bat') {
+      g.clear();
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.18, 12), bodyMat);
+      handle.rotation.x = Math.PI / 2;
+      handle.position.set(0, 0, -0.1);
+      g.add(handle);
+      const barrelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.55, 14), accentMat);
+      barrelMesh.rotation.x = Math.PI / 2;
+      barrelMesh.position.set(0, 0, -0.5);
+      g.add(barrelMesh);
+      g.position.set(0.20, this.gunBaseY + 0.02, -0.3);
+      return g;
+    }
+    if (id === 'grenade') {
+      g.clear();
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.10, 16, 12), accentMat);
+      ball.position.set(0, 0, -0.18);
+      g.add(ball);
+      const pin = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.008, 8, 16), bodyMat);
+      pin.rotation.x = Math.PI / 2;
+      pin.position.set(0, 0.10, -0.18);
+      g.add(pin);
+      g.position.set(0.20, this.gunBaseY + 0.02, -0.32);
+      return g;
+    }
     if (id === 'knife') {
       // Replace gun shape with a blade.
       g.clear();

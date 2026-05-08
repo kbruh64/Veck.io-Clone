@@ -88,6 +88,11 @@
       <div id="scoreboard"><table><thead><tr><th>Player</th><th>Score</th><th>HP</th></tr></thead><tbody id="sbBody"></tbody></table></div>
       <div id="score">Score: <b id="scoreVal">0</b></div>
       <div id="timer" style="position:absolute; left:50%; top:14px; transform:translateX(-50%); background:rgba(0,0,0,0.55); padding:8px 16px; border-radius:8px; font-size:22px; font-weight:600; letter-spacing:0.06em; display:none;">5:00</div>
+      <div id="teamScore" style="position:absolute; left:50%; top:60px; transform:translateX(-50%); background:rgba(0,0,0,0.55); padding:6px 12px; border-radius:8px; font-size:18px; font-weight:600; display:none;">
+        <span style="color:#7fd1ff;">Blue <span id="tsBlue">0</span></span>
+        &nbsp;·&nbsp;
+        <span style="color:#ff7f7f;">Red <span id="tsRed">0</span></span>
+      </div>
       <div id="stats">
         <div>HP: <span id="hp">100</span></div>
         <div>Weapon: <span id="weapon" style="color:#ffd470;">SMG</span></div>
@@ -135,6 +140,15 @@
           </div>
           <div style="margin:6px 0;">
             <label>Name<br><input id="mpName" value="" placeholder="Player" style="width:100%;padding:6px;border-radius:5px;border:1px solid #38404f;background:#0e1219;color:#e8ecf1;font-family:inherit;"></label>
+          </div>
+          <div style="margin:6px 0;">
+            <label>Mode<br>
+              <select id="mpMode" style="width:100%;padding:6px;border-radius:5px;border:1px solid #38404f;background:#0e1219;color:#e8ecf1;font-family:inherit;">
+                <option value="gungame">Gun Game — progress through every weapon</option>
+                <option value="dm">Deathmatch — first to 20 kills</option>
+                <option value="tdm">Team Deathmatch — 5v5 to 20 team kills</option>
+              </select>
+            </label>
           </div>
           <div style="margin:6px 0;">
             <label>Bots<br>

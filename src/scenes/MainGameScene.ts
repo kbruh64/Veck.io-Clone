@@ -7,6 +7,8 @@ import { SettingsMenu } from '../ui/SettingsMenu';
 import { NetClient } from '../net/NetClient';
 import { WEAPONS, WEAPON_ORDER, WeaponId } from '../game/Weapons';
 import { TouchControls } from '../ui/TouchControls';
+import { LoadoutPicker, loadSavedLoadout } from '../ui/LoadoutPicker';
+import { Loadout } from '../game/Weapons';
 
 type Mode = 'sp' | 'mp';
 
@@ -19,6 +21,9 @@ export class MainGameScene extends Phaser.Scene {
   private mode: Mode = 'sp';
   private net: NetClient | null = null;
   private touch!: TouchControls;
+  private loadoutUI!: LoadoutPicker;
+  private loadout: Loadout = loadSavedLoadout();
+  private lastPhase: string = '';
   private xp = 0;
   private level = 1;
 
@@ -60,6 +65,11 @@ export class MainGameScene extends Phaser.Scene {
 
     this.touch = new TouchControls();
 
+    this.loadoutUI = new LoadoutPicker(
+      (l) => { this.loadout = l; this.net?.sendLoadout(l); },
+      (l) => { this.loadout = l; this.net?.sendLoadout(l); this.engagePlay(); }
+    );
+
     this.attachOverlay();
     this.attachDomInput();
   }
@@ -95,19 +105,25 @@ export class MainGameScene extends Phaser.Scene {
       const url = urlInput.value.trim() || defaultUrl;
       const name = nameInput.value.trim() || 'Player';
       const prog = (document.getElementById('mpProg') as HTMLSelectElement | null)?.value || 'classic';
+      const modeSel = ((document.getElementById('mpMode') as HTMLSelectElement | null)?.value || 'gungame') as 'gungame' | 'dm' | 'tdm';
       const bots = parseInt((document.getElementById('mpBots') as HTMLSelectElement | null)?.value || '0', 10);
       localStorage.setItem('veckio.name', name);
       localStorage.setItem('veckio.url', url);
       localStorage.setItem('veckio.prog', prog);
       localStorage.setItem('veckio.bots', String(bots));
+      localStorage.setItem('veckio.mode', modeSel);
       status.textContent = 'Connecting…';
       try {
         await this.startMultiplayer(url, name);
+        this.net?.sendMode(modeSel);
         this.net?.sendProgression(prog);
         this.net?.sendBots(bots);
+        this.net?.sendLoadout(this.loadout);
         status.textContent = '';
       } catch (err: any) { status.textContent = `Failed: ${err?.message ?? err}`; }
     });
+    const savedMode = localStorage.getItem('veckio.mode');
+    if (savedMode) (document.getElementById('mpMode') as HTMLSelectElement).value = savedMode;
     const savedProg = localStorage.getItem('veckio.prog');
     if (savedProg) (document.getElementById('mpProg') as HTMLSelectElement).value = savedProg;
     const savedBots = localStorage.getItem('veckio.bots');
@@ -155,7 +171,14 @@ export class MainGameScene extends Phaser.Scene {
     this.net = new NetClient();
     await this.net.connect(url, name);
     document.getElementById('scoreboard')!.style.display = 'block';
-    this.engagePlay();
+    // Don't engage play yet — wait for phase event. If we land mid-warmup, picker shows; if mid-live, engage.
+    document.getElementById('overlay')!.classList.add('hidden');
+    if (this.net.phase === 'warmup') {
+      const endsAt = (this.net as any).phaseEndsAt ?? (Date.now() + 30000);
+      this.loadoutUI.show(endsAt);
+    } else {
+      this.engagePlay();
+    }
   }
 
   /** Hide the lobby and start playing. Mobile uses touch UI; desktop uses pointer-lock. */
@@ -231,12 +254,17 @@ export class MainGameScene extends Phaser.Scene {
       if (e.code === b.sprint) this.input$.sprint = true;
       if (e.code === b.slide) this.input$.slide = true;
       if (e.code === b.scoreboard) this.showScoreboard = true;
-      // Disable manual weapon switching in multiplayer (server-authoritative).
+      // Weapon switching: SP free; MP gungame forced; MP dm/tdm uses loadout slots.
       if (this.mode !== 'mp') {
         if (e.code === b.weapon1) this.board.switchWeapon('pistol');
         if (e.code === b.weapon2) this.board.switchWeapon('smg');
         if (e.code === b.weapon3) this.board.switchWeapon('shotgun');
         if (e.code === b.weapon4) this.board.switchWeapon('sniper');
+      } else if (this.net?.mode !== 'gungame') {
+        if (e.code === b.weapon1) this.board.switchWeapon(this.loadout.main);
+        if (e.code === b.weapon2) this.board.switchWeapon(this.loadout.backup);
+        if (e.code === b.weapon3) this.board.switchWeapon(this.loadout.melee);
+        if (e.code === b.weapon4) this.board.switchWeapon(this.loadout.accessory);
       }
       if (e.code === b.settings) {
         if (this.locked || !this.menu.isOpen()) setTimeout(() => this.menu.open(), 30);
@@ -303,11 +331,22 @@ export class MainGameScene extends Phaser.Scene {
         const ms = Math.max(0, this.net.remainingMs);
         const m = Math.floor(ms / 60000);
         const s = Math.floor((ms % 60000) / 1000);
-        timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        const prefix = this.net.phase === 'warmup' ? 'WARMUP ' : '';
+        timerEl.textContent = `${prefix}${m}:${s.toString().padStart(2, '0')}`;
         timerEl.style.color = ms < 30000 ? '#ff8080' : '#fff';
         timerEl.style.display = 'block';
       } else {
         timerEl.style.display = 'none';
+      }
+    }
+    const tsEl = document.getElementById('teamScore');
+    if (tsEl) {
+      if (this.mode === 'mp' && this.net?.mode === 'tdm' && this.net.teamScore) {
+        tsEl.style.display = 'block';
+        const tb = document.getElementById('tsBlue'); if (tb) tb.textContent = String(this.net.teamScore[0]);
+        const tr = document.getElementById('tsRed');  if (tr) tr.textContent = String(this.net.teamScore[1]);
+      } else {
+        tsEl.style.display = 'none';
       }
     }
     set('enemies', String(this.mode === 'mp' ? Math.max(0, (this.net?.players.size ?? 1) - 1) : this.board.enemies.filter(e => e.alive).length));
@@ -510,10 +549,22 @@ export class MainGameScene extends Phaser.Scene {
               : this.board.player.current === 'shotgun' ? 110 : 180;
             this.three.spawnBullet(barrel, end, bulletColor, bulletSpeed);
             if (this.mode === 'mp' && this.net) {
-              this.net.sendShoot([barrel.x, barrel.y, barrel.z], [end.x, end.y, end.z]);
+              this.net.sendShoot([barrel.x, barrel.y, barrel.z], [end.x, end.y, end.z], this.board.player.current);
               if (remoteHitId != null) {
-                this.net.sendHit(remoteHitId, def.damage);
+                this.net.sendHit(remoteHitId, def.damage, this.board.player.current);
                 anyHitRemote = true;
+              }
+              // Grenade AOE: damage everyone within radius of impact.
+              if (def.aoeRadius && def.aoeRadius > 0) {
+                const radSq = def.aoeRadius * def.aoeRadius;
+                for (const rp of this.net.players.values()) {
+                  if (rp.id === this.net.selfId || !rp.alive) continue;
+                  const dx = rp.x - end.x, dy = rp.y - end.y, dz = rp.z - end.z;
+                  if (dx*dx + dy*dy + dz*dz <= radSq) {
+                    this.net.sendHit(rp.id, def.damage, this.board.player.current);
+                    anyHitRemote = true;
+                  }
+                }
               }
             }
             if (r.killed) this.gainXp(100);
@@ -528,14 +579,31 @@ export class MainGameScene extends Phaser.Scene {
     this.lastShotHeld = this.input$.shoot;
 
     if (this.mode === 'mp' && this.net?.connected) {
-      // Server-authoritative weapon: force player.current from server level.
-      const me = this.net.players.get(this.net.selfId);
-      if (me && this.net.chain.length > 0) {
-        const idx = Math.min(me.level, this.net.chain.length - 1);
-        const forced = this.net.chain[idx] as WeaponId;
-        if (this.board.player.weapons[forced] && this.board.player.current !== forced) {
-          this.board.player.current = forced;
-          this.board.player.switchCooldown = 0;
+      // Phase change handling.
+      if (this.net.phase !== this.lastPhase) {
+        this.lastPhase = this.net.phase;
+        if (this.net.phase === 'warmup') {
+          this.loadoutUI.show(Date.now() + this.net.remainingMs);
+          if (document.pointerLockElement) document.exitPointerLock();
+        } else if (this.net.phase === 'live') {
+          if (this.loadoutUI.isOpen()) this.loadoutUI.hide();
+          // In dm/tdm, spawn with loadout main; gungame is forced by chain below.
+          if (this.net.mode !== 'gungame') {
+            const main = this.loadout.main;
+            if (this.board.player.weapons[main]) this.board.player.current = main;
+          }
+        }
+      }
+      // Server-authoritative weapon in gun-game.
+      if (this.net.mode === 'gungame') {
+        const me = this.net.players.get(this.net.selfId);
+        if (me && this.net.chain.length > 0) {
+          const idx = Math.min(me.level, this.net.chain.length - 1);
+          const forced = this.net.chain[idx] as WeaponId;
+          if (this.board.player.weapons[forced] && this.board.player.current !== forced) {
+            this.board.player.current = forced;
+            this.board.player.switchCooldown = 0;
+          }
         }
       }
       const p = this.board.player;

@@ -3,7 +3,7 @@ export interface RemotePlayer {
   x: number; y: number; z: number;
   yaw: number; pitch: number;
   hp: number; score: number; alive: boolean;
-  level: number; weapon: string;
+  level: number; weapon: string; team: number;
   prevX: number; prevY: number; prevZ: number;
   prevYaw: number; prevPitch: number;
   lerpStart: number; lerpEnd: number;
@@ -29,6 +29,10 @@ export class NetClient {
   respawnMs = 5000;
   remainingMs = 0;
   durationMs = 5 * 60 * 1000;
+  mode: 'gungame' | 'dm' | 'tdm' = 'gungame';
+  phase: 'warmup' | 'live' | 'over' = 'live';
+  killLimit = 20;
+  teamScore: [number, number] | null = null;
   private lastStateSent = 0;
 
   connect(url: string, name: string): Promise<void> {
@@ -72,12 +76,12 @@ export class NetClient {
     this.send({ t: 'state', x, y, z, yaw, pitch });
   }
 
-  sendShoot(from: [number, number, number], to: [number, number, number]) {
-    this.send({ t: 'shoot', from, to });
+  sendShoot(from: [number, number, number], to: [number, number, number], weapon?: string) {
+    this.send({ t: 'shoot', from, to, weapon });
   }
 
-  sendHit(target: number, dmg: number) {
-    this.send({ t: 'hit', target, dmg });
+  sendHit(target: number, dmg: number, weapon?: string) {
+    this.send({ t: 'hit', target, dmg, weapon });
   }
 
   sendProgression(name: string) {
@@ -86,6 +90,14 @@ export class NetClient {
 
   sendBots(count: number) {
     this.send({ t: 'setBots', count });
+  }
+
+  sendMode(name: 'gungame' | 'dm' | 'tdm') {
+    this.send({ t: 'mode', name });
+  }
+
+  sendLoadout(loadout: { main: string; backup: string; melee: string; accessory: string }) {
+    this.send({ t: 'loadout', loadout });
   }
 
   private onMessage(raw: string) {
@@ -99,14 +111,31 @@ export class NetClient {
         if (msg.progression) this.progressionName = msg.progression;
         if (msg.respawnMs) this.respawnMs = msg.respawnMs;
         if (msg.durationMs) this.durationMs = msg.durationMs;
+        if (msg.killLimit) this.killLimit = msg.killLimit;
+        if (msg.mode) this.mode = msg.mode;
+        if (msg.phase) this.phase = msg.phase;
         this.applySnap(msg.snap);
-        this.events.push({ t: 'welcome', id: msg.id });
+        this.events.push({ t: 'welcome', id: msg.id, ...(msg as any) } as any);
+        break;
+      case 'phase':
+        if (msg.phase) this.phase = msg.phase;
+        if (msg.mode) this.mode = msg.mode;
+        if (msg.killLimit) this.killLimit = msg.killLimit;
+        this.events.push(msg);
+        break;
+      case 'modeChanged':
+        if (msg.mode) this.mode = msg.mode;
+        this.events.push(msg);
         break;
       case 'snap':
         if (Array.isArray(msg.chain)) this.chain = msg.chain;
         if (msg.progression) this.progressionName = msg.progression;
         if (typeof msg.remainingMs === 'number') this.remainingMs = msg.remainingMs;
         if (typeof msg.durationMs === 'number') this.durationMs = msg.durationMs;
+        if (msg.mode) this.mode = msg.mode;
+        if (msg.phase) this.phase = msg.phase;
+        if (msg.killLimit) this.killLimit = msg.killLimit;
+        this.teamScore = msg.teamScore ?? null;
         this.applySnap(msg);
         break;
       case 'progression':
@@ -135,7 +164,7 @@ export class NetClient {
           id: sp.id, name: sp.name,
           x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw, pitch: sp.pitch,
           hp: sp.hp, score: sp.score, alive: sp.alive,
-          level: sp.level ?? 0, weapon: sp.weapon ?? 'pistol',
+          level: sp.level ?? 0, weapon: sp.weapon ?? 'pistol', team: sp.team ?? -1,
           prevX: sp.x, prevY: sp.y, prevZ: sp.z, prevYaw: sp.yaw, prevPitch: sp.pitch,
           lerpStart: now, lerpEnd: now,
         };
@@ -148,6 +177,7 @@ export class NetClient {
         rp.hp = sp.hp; rp.score = sp.score; rp.alive = sp.alive;
         rp.level = sp.level ?? rp.level;
         rp.weapon = sp.weapon ?? rp.weapon;
+        rp.team = sp.team ?? rp.team;
         rp.name = sp.name;
         rp.lerpStart = now;
         rp.lerpEnd = now + 100;
