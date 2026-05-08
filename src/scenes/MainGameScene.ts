@@ -615,7 +615,7 @@ export class MainGameScene extends Phaser.Scene {
       for (const rp of others) {
         const interp = this.net.interpolated(rp.id, now);
         if (!interp) continue;
-        this.three.setRemoteTransform(rp.id, interp.x, interp.y, interp.z, interp.yaw, rp.alive);
+        this.three.setRemoteTransform(rp.id, interp.x, interp.y, interp.z, interp.yaw, rp.alive, rp.team);
       }
     } else {
       this.three.syncRemotePlayers([]);

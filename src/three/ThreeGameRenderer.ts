@@ -285,12 +285,30 @@ export class ThreeGameRenderer {
     }
   }
 
-  setRemoteTransform(id: number, x: number, y: number, z: number, yaw: number, alive: boolean) {
+  setRemoteTransform(id: number, x: number, y: number, z: number, yaw: number, alive: boolean, team: number = -1) {
     const m = this.remoteMeshes.get(id);
     if (!m) return;
     m.visible = alive;
-    m.position.set(x, y - 0.85, z); // capsule center to feet-ish offset
+    m.position.set(x, y - 0.85, z);
     m.rotation.y = yaw;
+    // Recolor body if team assignment changed.
+    if (m.userData.team !== team) {
+      m.userData.team = team;
+      const body = m.children[0] as THREE.Mesh;
+      const bodyMat = body.material as THREE.MeshStandardMaterial;
+      const head = m.children[1] as THREE.Mesh;
+      const headMat = head.material as THREE.MeshStandardMaterial;
+      if (team === 0) {
+        bodyMat.color.setHex(0x4aa8ff); bodyMat.emissive.setHex(0x0a2a4a);
+        headMat.color.setHex(0xc0e0ff);
+      } else if (team === 1) {
+        bodyMat.color.setHex(0xff5060); bodyMat.emissive.setHex(0x3a0a10);
+        headMat.color.setHex(0xffd0d0);
+      } else {
+        bodyMat.color.setHex(0x7fd1ff); bodyMat.emissive.setHex(0x103040);
+        headMat.color.setHex(0xddeeff);
+      }
+    }
   }
 
   private makeEnemyMesh(_e: Enemy): THREE.Group {
