@@ -147,17 +147,26 @@ function startWarmup() {
   phaseEndsAt = phaseStartedAt + WARMUP_MS;
   matchOver = false;
   teamScore = [0, 0];
-  // Reset everyone.
+  // Clear teams first so assignTeam balances from scratch.
+  if (mode === 'tdm') {
+    for (const q of players.values()) q.team = -1;
+    // Assign humans first (they get to keep affinity), then bots fill remaining slots evenly.
+    for (const q of players.values()) if (!q.isBot) q.team = assignTeam();
+    for (const q of players.values()) if (q.isBot) q.team = assignTeam();
+  } else {
+    for (const q of players.values()) q.team = -1;
+  }
+  // Reset stats / spawns.
   for (const q of players.values()) {
     q.score = 0; q.level = 0; q.hp = 100; q.alive = true;
-    if (mode === 'tdm') q.team = assignTeam();
-    else q.team = -1;
     const [sx, sy, sz] = pickSpawn();
     q.x = sx; q.y = sy; q.z = sz;
     if (q.ws) send(q.ws, { t: 'phase', phase, endsAt: phaseEndsAt, mode, killLimit: KILL_LIMIT });
   }
   broadcast({ t: 'phase', phase, endsAt: phaseEndsAt, mode, killLimit: KILL_LIMIT });
-  console.log(`[veckio] warmup begin (mode=${mode}, ${players.size} players, ${botCount()} bots)`);
+  const t0 = [...players.values()].filter(p => p.team === 0).length;
+  const t1 = [...players.values()].filter(p => p.team === 1).length;
+  console.log(`[veckio] warmup begin mode=${mode}  players=${players.size}  bots=${botCount()}  teams=${t0}v${t1}`);
 }
 function startLive() {
   phase = 'live';
